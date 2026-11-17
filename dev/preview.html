@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motivationswaage – Vorschau</title>
+<style>
+	:root { --m3-primary: #225e65; --m3-on-primary: #fff; --m3-surface-container-lowest: #fff; --m3-surface-container-low: #f3f5f6;
+		--m3-surface-container-high: #e5e9ea; --m3-on-surface: #191c1d; --m3-on-surface-variant: #3f484a; --m3-outline: #6f797a;
+		--m3-outline-variant: #bfc8ca; --m3-error: #ba1a1a; }
+	body { margin: 0; font-family: Nunito, 'Segoe UI', system-ui, sans-serif; background: #eef1f2; color: #191c1d; }
+	header { display: flex; gap: 12px; align-items: center; padding: 12px 20px; background: #fff; border-bottom: 1px solid #dde3e4; flex-wrap: wrap; }
+	header b { margin-right: auto; }
+	header button, header label { font: inherit; font-size: 14px; }
+	main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 20px; align-items: start; }
+	@media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+	h1 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: #3f484a; margin: 0 0 10px; }
+	#toasts { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 8px; z-index: 10; }
+	.toast { background: #2e3132; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 14px; max-width: 360px; }
+	.toast.error { background: #ba1a1a; }
+</style>
+<script type="importmap">
+{ "imports": {
+	"react": "https://esm.sh/react@19.1.0",
+	"react-dom/client": "https://esm.sh/react-dom@19.1.0/client?deps=react@19.1.0"
+} }
+</script>
+</head>
+<body>
+<header>
+	<b>Motivationswaage – lokale Vorschau</b>
+	<label><input type="checkbox" id="informal"> Duzen</label>
+	<button id="sample">Beispieldaten</button>
+	<button id="reset">Zurücksetzen</button>
+</header>
+<main>
+	<section><h1>Ratsuchende (asker.navigation)</h1><div id="asker"></div></section>
+	<section><h1>Beratende (consultant.session)</h1><div id="counsellor"></div></section>
+</main>
+<div id="toasts"></div>
+<script type="module">
+	import * as React from 'react';
+	import * as reactDomClient from 'react-dom/client';
+	globalThis.__ORISO_ADDON_SHARED__ = { contract: 'oriso-addon/v1', react: React, reactDomClient };
+	const { calculate } = await import('/ui/balance.mjs');
+	const addon = await import('/ui/entry.js');
+
+	const fresh = () => ({ released: false, releasedAt: null, arguments: [], conclusion: '', shared: false, updatedAt: null, started: false });
+	let state = JSON.parse(sessionStorage.getItem('mw-preview') ?? 'null') ?? fresh();
+	const persist = () => sessionStorage.setItem('mw-preview', JSON.stringify(state));
+	const settings = { intro: '', poles: 'CONTRA Veränderung / PRO Veränderung', allowSharing: true };
+	const view = () => ({ arguments: state.arguments, conclusion: state.conclusion, result: calculate(state.arguments) });
+	const ok = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+	const api = async (path, init = {}) => {
+		await new Promise((r) => setTimeout(r, 150));
+		const method = init.method ?? 'GET';
+		if (path === '/balance' && method === 'GET') {
+			return ok({ released: state.released, ...view(), shared: state.shared, updatedAt: state.updatedAt, ...settings });
+		}
+		if (path === '/balance' && method === 'PUT') {
+			const body = JSON.parse(init.body);
+			Object.assign(state, { arguments: body.arguments, conclusion: body.conclusion ?? '', shared: body.shared, updatedAt: new Date().toISOString(), started: true });
+			persist();
+			setTimeout(renderCounsellor, 0);
+			return ok({ ...view(), shared: state.shared, updatedAt: state.updatedAt });
+		}
+		const client = () => ({
+			released: state.released, releasedAt: state.releasedAt, started: state.started, updatedAt: state.updatedAt,
+			shared: state.released && state.shared, balance: state.released && state.shared ? view() : null, poles: settings.poles
+		});
+		if (path === '/balance/client') return ok(client());
+		if (path === '/balance/client/release') {
+			state.released = true; state.releasedAt = new Date().toISOString(); persist();
+			setTimeout(renderAsker, 0);
+			return ok({ released: true, releasedAt: state.releasedAt });
+		}
+		if (path === '/balance/client/export') return ok({ ...client(), exportedAt: new Date().toISOString() });
+		return new Response('{}', { status: 404 });
+	};
+
+	const notify = ({ type, text }) => {
+		const toast = Object.assign(document.createElement('div'), { className: `toast ${type}`, textContent: text });
+		document.getElementById('toasts').append(toast);
+		setTimeout(() => toast.remove(), 3500);
+	};
+
+	const props = (slot, el) => ({
+		contract: 'oriso-addon/v1', domElement: el, addon: { name: 'motivationswaage', version: '0.1.0' }, app: { id: 'balance' },
+		slot, user: { id: 'u', username: 'preview', roles: [] }, tenant: { id: 1 }, locale: 'de',
+		informal: document.getElementById('informal').checked, theme: {}, sessionId: 4711, askerId: 'asker-1',
+		api, navigate: () => {}, notify
+	});
+	const mounted = new Map();
+	const render = async (slot, id) => {
+		const el = document.getElementById(id);
+		if (mounted.has(id)) await addon.unmount(mounted.get(id));
+		const p = props(slot, el);
+		mounted.set(id, p);
+		await addon.mount(p);
+	};
+	const renderAsker = () => render('asker.navigation', 'asker');
+	const renderCounsellor = () => render('consultant.session', 'counsellor');
+
+	document.getElementById('informal').onchange = () => { renderAsker(); renderCounsellor(); };
+	document.getElementById('reset').onclick = () => { state = fresh(); persist(); renderAsker(); renderCounsellor(); };
+	document.getElementById('sample').onclick = () => {
+		const a = (id, category, text, rating) => ({ id, category, text, rating });
+		state = { ...fresh(), released: true, releasedAt: new Date().toISOString(), started: true, shared: true, updatedAt: new Date().toISOString(),
+			conclusion: 'Die Vorteile überwiegen deutlich. Ich möchte es mit Unterstützung versuchen, habe aber Respekt vor den ersten Wochen.',
+			arguments: [
+				a('s1', 'A', 'Ich kann wieder klar denken.', 3), a('s2', 'A', 'Mehr Geld / weniger Schulden.', 3), a('s3', 'A', 'Weniger Stress mit Freunden / Familie.', 2),
+				a('s4', 'B', 'Es wird schwierig mit dem alten Freundeskreis.', 2), a('s5', 'B', 'Der Entzug / Verzicht wird hart.', 3),
+				a('s6', 'C', 'Beim Trinken habe ich meine Ruhe.', 1),
+				a('s7', 'D', 'Es geht gesundheitlich weiter bergab.', 3), a('s8', 'D', 'Weiterhin Ärger und Streit mit meiner Familie.', 2)
+			] };
+		persist(); renderAsker(); renderCounsellor();
+	};
+	renderAsker();
+	renderCounsellor();
+</script>
+</body>
+</html>
