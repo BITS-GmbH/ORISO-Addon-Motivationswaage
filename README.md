@@ -11,7 +11,7 @@ whether their counsellor may read it.
 | Who | Where (slot) | What |
 |---|---|---|
 | Client | own page (`asker.navigation`) | Overview with the scale, conclusion, the four lists and the sharing switch; editors for "change" and "no change" with examples |
-| Counsellor | case view (`consultant.session`), client profile (`consultant.asker-profile`) | Releases the tool; sees the status and, if shared, the scale, conclusion and arguments (read only); PDF export; user preview with test data |
+| Counsellor | case view (`consultant.session`), client profile (`consultant.asker-profile`) | Releases the tool or withdraws the release; sees the status and, if shared, the scale, conclusion and arguments (read only); PDF export; user preview with test data |
 | Admin | ORISO-Admin | Settings per Träger or agency: intro text, pole labels (the three variants of the description), whether sharing is possible; statistics: released, started, shared |
 
 ## The calculation (2.4.5)
@@ -37,7 +37,7 @@ calculation, categories and example texts; the UI loads the same module.
   identified by `sub`; counsellors only get a client when the AddonService verified their access
   to the session (`askerId` claim).
 - API: `GET`/`PUT /api/balance` (client; whole state: arguments, conclusion, shared),
-  `GET /api/balance/client`, `POST /api/balance/client/release`, `POST /api/balance/client/export`
+  `GET /api/balance/client`, `POST`/`DELETE /api/balance/client/release`, `POST /api/balance/client/export`
   (counsellor).
 - Release, insight and content are separate states: a counsellor can release the tool, but only
   sees content the client shared. The export checks again right before it answers.
@@ -48,6 +48,8 @@ calculation, categories and example texts; the UI loads the same module.
   - Client shares: audit `balance.shared`, notification to the client's counsellors.
   - New or edited entries while shared: notification to the counsellors, at most one per
     30 minutes; quicker changes are folded into it. Notifications never contain content.
+  - Release withdrawn ("Freischaltung aufheben"): audit `tool.revoked`; the tool disappears for the
+    client and counsellors see no content. The entries stay and are back with a new release.
   - Client stops sharing: audit `balance.unshared`; the content is gone for counsellors at once.
   - PDF export: audit `balance.exported`.
   - Before a new release the Träger's DPA gate (`/addons/host/gates`) is checked; 409 if it

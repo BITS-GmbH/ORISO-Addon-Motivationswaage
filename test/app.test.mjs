@@ -281,6 +281,29 @@ describe('the balance', () => {
 		assert.equal(bad.status, 400);
 	});
 
+	it('withdraws a release: tool hidden, content closed, entries kept for a new release', async () => {
+		await call('/api/balance', { auth: asker, method: 'PUT', body: { arguments: [arg('k1', 'A', 'bleibt', 2)], shared: true } });
+		takeHostCalls();
+		const revoked = await call('/api/balance/client/release', { auth: counsellor, method: 'DELETE' });
+		assert.equal(revoked.status, 200);
+		assert.equal(revoked.body.released, false);
+		assert.deepEqual(takeHostCalls().map((c) => c.body.action), ['tool.revoked']);
+		assert.equal((await call('/api/balance', { auth: asker })).body.released, false);
+		assert.deepEqual((await call('/visibility', { auth: asker })).body.apps.balance, { visible: false });
+		const put = await call('/api/balance', { auth: asker, method: 'PUT', body: { arguments: [], shared: true } });
+		assert.equal(put.status, 403);
+		const state = await call('/api/balance/client', { auth: counsellor });
+		assert.equal(state.body.released, false);
+		assert.equal(state.body.balance, null);
+
+		await call('/api/balance/client/release', { auth: counsellor, method: 'POST' });
+		const back = await call('/api/balance', { auth: asker });
+		assert.equal(back.body.released, true);
+		assert.deepEqual(back.body.arguments.map((a) => a.text), ['bleibt'], 'entries are back after a new release');
+		await call('/api/balance', { auth: asker, method: 'PUT', body: { arguments: back.body.arguments, shared: false } });
+		takeHostCalls();
+	});
+
 	it('refuses a new release when the Träger has not confirmed the DPA', async () => {
 		gates = { dpa: { status: 'MISSING', newCounsellingAllowed: false } };
 		const refused = await call('/api/balance/client/release', { auth: counsellorFor('asker-9'), method: 'POST' });

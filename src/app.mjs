@@ -11,6 +11,7 @@ import {
 	NOTIFY_QUIET_MS,
 	releaseNotification,
 	RELEASED_AUDIT,
+	REVOKED_AUDIT,
 	SHARED_AUDIT,
 	sharedNotification,
 	UNSHARED_AUDIT
@@ -86,7 +87,7 @@ export const createApp = ({ store, verify, host = null, uiFiles = UI_FILES, now 
 		const wasShared = before?.shared ?? false;
 		if (after.shared && !wasShared) {
 			await Promise.all([host.audit(claims, SHARED_AUDIT), host.notify(claims, sharedNotification())]);
-			store.markNotified(tenantId, claims.sub);
+			store.markNotified(tenantId, claims.sub, new Date(now()).toISOString());
 			return;
 		}
 		if (!after.shared && wasShared) {
@@ -195,6 +196,12 @@ export const createApp = ({ store, verify, host = null, uiFiles = UI_FILES, now 
 				]);
 			}
 			return json(res, 200, { released: true, releasedAt: release.releasedAt });
+		}
+		if (path === '/api/balance/client/release' && req.method === 'DELETE') {
+			if (store.revoke(tenantId, claims.askerId)) {
+				await host?.audit(claims, REVOKED_AUDIT);
+			}
+			return json(res, 200, { released: false });
 		}
 		return json(res, 404, { error: 'not found' });
 	};

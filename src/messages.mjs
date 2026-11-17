@@ -57,6 +57,13 @@ export const RELEASED_AUDIT = {
 	subject: 'asker'
 };
 
+export const REVOKED_AUDIT = {
+	action: 'tool.revoked',
+	appId: APP_ID,
+	summary: { de: 'Freischaltung „Motivationswaage“ aufgehoben', en: 'Withdrew tool “decisional balance”' },
+	subject: 'asker'
+};
+
 export const SHARED_AUDIT = {
 	action: 'balance.shared',
 	appId: APP_ID,

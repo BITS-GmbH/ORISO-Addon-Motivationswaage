@@ -865,6 +865,9 @@ function AskerView({ api, informal, notify }) {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(next)
 		});
+		if (response.status === 403) {
+			throw new Error(tx(informal, 'die Motivationswaage ist nicht mehr freigeschaltet', 'die Motivationswaage ist nicht mehr freigeschaltet'));
+		}
 		if (!response.ok) {
 			throw new Error(`HTTP ${response.status}`);
 		}
@@ -1025,6 +1028,7 @@ function CounsellorView({ api, locale, notify, informal, sessionId }) {
 	const [busy, setBusy] = useState(null);
 	const [message, setMessage] = useState(null);
 	const [preview, setPreview] = useState(false);
+	const [confirmRevoke, setConfirmRevoke] = useState(false);
 	const rootRef = useRef(null);
 
 	const say = (type, text) => {
@@ -1059,6 +1063,24 @@ function CounsellorView({ api, locale, notify, informal, sessionId }) {
 			say('success', 'Die Motivationswaage ist freigeschaltet. Die ratsuchende Person wird benachrichtigt.');
 		} catch (reason) {
 			say('error', `Freischalten hat nicht geklappt (${reason.message}).`);
+		} finally {
+			setBusy(null);
+		}
+	};
+
+	const revoke = async () => {
+		setConfirmRevoke(false);
+		setBusy('revoke');
+		setMessage(null);
+		try {
+			const response = await api('/balance/client/release', { method: 'DELETE' });
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status}`);
+			}
+			await reload();
+			say('success', 'Die Freischaltung ist aufgehoben. Die Einträge bleiben gespeichert und sind nach einer neuen Freischaltung wieder da.');
+		} catch (reason) {
+			say('error', `Aufheben hat nicht geklappt (${reason.message}).`);
 		} finally {
 			setBusy(null);
 		}
@@ -1138,8 +1160,27 @@ function CounsellorView({ api, locale, notify, informal, sessionId }) {
 					{ type: 'button', className: 'mw-btn mw-btn--outlined', onClick: () => setPreview(true) },
 					icon('eye'),
 					'User-Vorschau'
-				)
+				),
+				data.released &&
+					!confirmRevoke &&
+					h(
+						'button',
+						{ type: 'button', className: 'mw-btn mw-btn--text', onClick: () => setConfirmRevoke(true), disabled: busy !== null },
+						busy === 'revoke' ? 'Wird aufgehoben …' : 'Freischaltung aufheben'
+					)
 			),
+			confirmRevoke &&
+				h(
+					'div',
+					{ className: 'mw-confirm mw-confirm--box', style: { marginTop: '12px' } },
+					h(
+						'span',
+						{ style: { flex: '1 1 260px' } },
+						'Freischaltung aufheben? Das Tool verschwindet für die ratsuchende Person und Sie sehen keine Inhalte mehr. Die Einträge bleiben gespeichert.'
+					),
+					h('button', { type: 'button', className: 'mw-btn mw-btn--danger', onClick: revoke }, 'Aufheben'),
+					h('button', { type: 'button', className: 'mw-btn mw-btn--text', onClick: () => setConfirmRevoke(false) }, 'Abbrechen')
+				),
 			message && h('p', { className: message.type === 'error' ? 'mw-error' : 'mw-muted', role: 'alert', style: { marginTop: '12px' } }, message.text)
 		),
 		data.released &&

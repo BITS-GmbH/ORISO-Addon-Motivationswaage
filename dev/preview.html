@@ -59,6 +59,7 @@
 			return ok({ released: state.released, ...view(), shared: state.shared, updatedAt: state.updatedAt, ...settings });
 		}
 		if (path === '/balance' && method === 'PUT') {
+			if (!state.released) return new Response('{}', { status: 403 });
 			const body = JSON.parse(init.body);
 			Object.assign(state, { arguments: body.arguments, conclusion: body.conclusion ?? '', shared: body.shared, updatedAt: new Date().toISOString(), started: true });
 			persist();
@@ -70,6 +71,11 @@
 			shared: state.released && state.shared, balance: state.released && state.shared ? view() : null, poles: settings.poles
 		});
 		if (path === '/balance/client') return ok(client());
+		if (path === '/balance/client/release' && method === 'DELETE') {
+			state.released = false; state.releasedAt = null; persist();
+			setTimeout(renderAsker, 0);
+			return ok({ released: false });
+		}
 		if (path === '/balance/client/release') {
 			state.released = true; state.releasedAt = new Date().toISOString(); persist();
 			setTimeout(renderAsker, 0);

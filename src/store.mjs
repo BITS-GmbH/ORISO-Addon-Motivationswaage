@@ -42,6 +42,7 @@ export const openStore = (file) => {
 		ON CONFLICT (tenant_id, asker_id) DO UPDATE SET data = excluded.data, shared = excluded.shared, updated_at = excluded.updated_at
 	`);
 	const setNotified = db.prepare('UPDATE balances SET notified_at = ? WHERE tenant_id = ? AND asker_id = ?');
+	const deleteRelease = db.prepare('DELETE FROM releases WHERE tenant_id = ? AND asker_id = ?');
 	const deleteReleasesOf = db.prepare('DELETE FROM releases WHERE asker_id = ?');
 	const deleteBalancesOf = db.prepare('DELETE FROM balances WHERE asker_id = ?');
 	const forgetReleaser = db.prepare("UPDATE releases SET released_by = 'deleted' WHERE released_by = ?");
@@ -63,6 +64,10 @@ export const openStore = (file) => {
 		release(tenantId, askerId, by) {
 			insertRelease.run(tenantId, askerId, by, new Date().toISOString());
 			return findRelease.get(tenantId, askerId);
+		},
+		/** Withdraws the release; the client's entries stay and are back with a new release. */
+		revoke(tenantId, askerId) {
+			return Number(deleteRelease.run(tenantId, askerId).changes) > 0;
 		},
 		releaseOf(tenantId, askerId) {
 			return findRelease.get(tenantId, askerId) ?? null;

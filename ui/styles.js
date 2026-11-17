@@ -20,6 +20,7 @@ export const CSS = `
 	--mw-error: var(--m3-error, #b3261e);
 	--mw-success: var(--m3-success, #2e7d32);
 	container-type: inline-size;
+	width: 100%;
 	color: var(--mw-text);
 	font: inherit;
 	font-size: 15px;
@@ -158,6 +159,7 @@ export const CSS = `
 .mw-item__meta { display: flex; align-items: center; gap: 2px; flex: none; }
 .mw-empty { color: var(--mw-muted); font-size: 14px; }
 .mw-confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+.mw-confirm--box { padding: 12px 14px; border-radius: 12px; background: var(--mw-surface-low); border: 1px solid var(--mw-outline-soft); }
 @keyframes mw-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 
 .mw-stars { display: inline-flex; gap: 1px; align-items: center; color: #e0a100; }
