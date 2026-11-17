@@ -10,6 +10,7 @@ import {
 	RATINGS,
 	calculate,
 	formatValue,
+	isNewSince,
 	polesOf,
 	tendency
 } from './balance.mjs';
@@ -92,6 +93,11 @@ const useJson = (api, path) => {
 };
 
 const ratingLabel = (rating) => RATINGS.find((r) => r.value === rating)?.label ?? '';
+
+/** Entries (and the conclusion) this counsellor has not seen yet. */
+const countNew = (balance, seenAt) =>
+	balance.arguments.filter((arg) => isNewSince(arg.changedAt, seenAt)).length +
+	(isNewSince(balance.conclusionChangedAt, seenAt) ? 1 : 0);
 
 const HALF_TEXT = {
 	change: 'Wenn ich mein Ziel erreiche / mein Verhalten ändere, habe ich folgende …',
@@ -249,7 +255,60 @@ function ArgumentList({ items, informal, onEdit, onDelete, editingId }) {
 	);
 }
 
-function HalfSection({ half, args, onOpen }) {
+/** Counsellor view: entries as cards with relevance and "Öffnen" (section 2.4, Beratenden-Ansicht). */
+function EntryCards({ items, seenAt, locale }) {
+	const [open, setOpen] = useState(null);
+	if (items.length === 0) {
+		return h('p', { className: 'mw-empty' }, 'Keine Einträge.');
+	}
+	return h(
+		'ul',
+		{ className: 'mw-list' },
+		...items.map((item) => {
+			const expanded = open === item.id;
+			const fresh = isNewSince(item.changedAt, seenAt);
+			const { long, side } = CATEGORIES[item.category];
+			return h(
+				'li',
+				{ key: item.id, className: cx('mw-entry', expanded && 'mw-entry--open', fresh && 'mw-entry--new') },
+				h(
+					'div',
+					{ className: 'mw-entry__row' },
+					h('span', { className: 'mw-entry__text' }, item.text),
+					fresh && h('span', { className: 'mw-new' }, 'Neu')
+				),
+				h(
+					'div',
+					{ className: 'mw-entry__row' },
+					h(Stars, { rating: item.rating }),
+					h(
+						'button',
+						{
+							type: 'button',
+							className: 'mw-btn mw-btn--text mw-btn--small',
+							'aria-expanded': expanded,
+							onClick: () => setOpen(expanded ? null : item.id)
+						},
+						expanded ? 'Schließen' : 'Öffnen'
+					)
+				),
+				expanded &&
+					h(
+						'dl',
+						{ className: 'mw-entry__details' },
+						h('dt', null, 'Kategorie'),
+						h('dd', null, `${long} (${side === 'pro' ? 'PRO' : 'CONTRA'})`),
+						h('dt', null, 'Relevanz'),
+						h('dd', null, `${ratingLabel(item.rating)} (${item.rating} ${item.rating === 1 ? 'Punkt' : 'Punkte'})`),
+						item.changedAt && h('dt', null, 'Zuletzt geändert'),
+						item.changedAt && h('dd', null, formatDate(item.changedAt, locale, true))
+					)
+			);
+		})
+	);
+}
+
+function HalfSection({ half, args, onOpen, readOnly, seenAt, locale }) {
 	return h(
 		'section',
 		{ className: 'mw-card' },
@@ -274,7 +333,7 @@ function HalfSection({ half, args, onOpen }) {
 						),
 						h(SideBadge, { category })
 					),
-					h(ArgumentList, { items }),
+					readOnly ? h(EntryCards, { items, seenAt, locale }) : h(ArgumentList, { items }),
 					onOpen &&
 						h(
 							'div',
@@ -292,7 +351,7 @@ function HalfSection({ half, args, onOpen }) {
 	);
 }
 
-function ConclusionCard({ value, hasArguments, informal, onSave }) {
+function ConclusionCard({ value, hasArguments, informal, onSave, isNew }) {
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState(value);
 	useEffect(() => {
@@ -360,7 +419,7 @@ function ConclusionCard({ value, hasArguments, informal, onSave }) {
 		h(
 			'div',
 			{ className: 'mw-head', style: { marginBottom: '8px' } },
-			h('h3', { className: 'mw-subtitle' }, onSave ? 'Mein Fazit' : 'Fazit'),
+			h('h3', { className: 'mw-subtitle' }, onSave ? 'Mein Fazit' : 'Fazit', isNew && h('span', { className: 'mw-new', style: { marginLeft: '8px' } }, 'Neu')),
 			onSave &&
 				hasArguments &&
 				!editing &&
@@ -489,13 +548,13 @@ function MiniResult({ args }) {
 	return h(
 		'div',
 		{ className: 'mw-mini', 'aria-live': 'polite' },
-		h('span', { className: 'mw-small mw-muted' }, 'CONTRA'),
+		h('span', { className: 'mw-small mw-muted' }, 'PRO'),
 		h(
 			'div',
 			{ className: 'mw-mini__bar', 'aria-hidden': true },
-			active && h('span', { className: 'mw-mini__dot', style: { left: `${((result.value + 10) / 20) * 100}%` } })
+			active && h('span', { className: 'mw-mini__dot', style: { left: `${((10 - result.value) / 20) * 100}%` } })
 		),
-		h('span', { className: 'mw-small mw-muted' }, 'PRO'),
+		h('span', { className: 'mw-small mw-muted' }, 'CONTRA'),
 		h(
 			'span',
 			{ className: 'mw-small', style: { fontWeight: 600, minWidth: '11em' } },
@@ -986,7 +1045,7 @@ const printDocument = (html) =>
 	});
 
 const COUNSELLOR_DESCRIPTION =
-	'Die Motivationswaage hilft Betroffenen, Vor- und Nachteile der Überwindung des Suchtverhaltens abzuwägen und zu gewichten. Damit können Unsicherheiten und Bedenken aufgedeckt und klarere Entscheidungen getroffen werden. Sofern Betroffene wollen, können sie ihrer Beraterin / ihrem Berater Einblick in ihre Notizen geben.';
+	'Die Motivationswaage hilft Betroffenen, Vor- und Nachteile der Überwindung des Suchtverhaltens abzuwägen und zu gewichten. Damit können Unsicherheiten und Bedenken aufgedeckt und klarere Entscheidungen getroffen werden. Sofern Betroffene wollen, können sie ihrer Beraterin / ihrem Berater Einblick in ihre Notizen geben, sodass diese gezielt auf die individuellen Abwägungen eingehen können.';
 
 function Preview({ informal, notify, onClose }) {
 	const [run, setRun] = useState(0);
@@ -1028,6 +1087,7 @@ function CounsellorView({ api, locale, notify, informal, sessionId }) {
 	const [busy, setBusy] = useState(null);
 	const [message, setMessage] = useState(null);
 	const [preview, setPreview] = useState(false);
+	const [entries, setEntries] = useState(null);
 	const [confirmRevoke, setConfirmRevoke] = useState(false);
 	const rootRef = useRef(null);
 
@@ -1036,6 +1096,13 @@ function CounsellorView({ api, locale, notify, informal, sessionId }) {
 			setMessage({ type, text });
 		}
 	};
+
+	// Leave the entries when the client stopped sharing in the meantime.
+	useEffect(() => {
+		if (entries && data && !data.shared) {
+			setEntries(null);
+		}
+	}, [entries, data]);
 
 	if (preview) {
 		return h(Preview, { informal, notify, onClose: () => setPreview(false) });
@@ -1077,10 +1144,37 @@ function CounsellorView({ api, locale, notify, informal, sessionId }) {
 			if (!response.ok) {
 				throw new Error(`HTTP ${response.status}`);
 			}
+			setEntries(null);
 			await reload();
 			say('success', 'Die Freischaltung ist aufgehoben. Die Einträge bleiben gespeichert und sind nach einer neuen Freischaltung wieder da.');
 		} catch (reason) {
 			say('error', `Aufheben hat nicht geklappt (${reason.message}).`);
+		} finally {
+			setBusy(null);
+		}
+	};
+
+	/** "Einträge ansehen": the server checks the access again; then they count as seen by this counsellor. */
+	const openEntries = async () => {
+		setBusy('open');
+		setMessage(null);
+		try {
+			const response = await api('/balance/client');
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status}`);
+			}
+			const fresh = await response.json();
+			if (!fresh.shared) {
+				await reload();
+				say('warning', 'Die ratsuchende Person hat die Einsicht zurückgenommen.');
+				return;
+			}
+			setEntries({ seenAt: fresh.seenAt });
+			await api('/balance/client/seen', { method: 'POST' }).catch(() => null);
+			await reload();
+			rootRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+		} catch (reason) {
+			say('error', `Die Einträge konnten nicht geladen werden (${reason.message}).`);
 		} finally {
 			setBusy(null);
 		}
@@ -1109,6 +1203,50 @@ function CounsellorView({ api, locale, notify, informal, sessionId }) {
 		}
 	};
 
+	const poles = polesOf(data.poles);
+	const messageLine =
+		message &&
+		h('p', { className: message.type === 'error' ? 'mw-error' : 'mw-muted', role: 'alert', style: { marginTop: '12px' } }, message.text);
+
+	// ----- Entries, read only (section 2.4, Beratenden-Ansicht)
+	if (entries && data.shared && data.balance) {
+		const { balance } = data;
+		const { seenAt } = entries;
+		return h(
+			'div',
+			{ className: 'mw-stack', ref: rootRef },
+			h(
+				'section',
+				{ className: 'mw-card' },
+				h(
+					'div',
+					{ className: 'mw-head' },
+					h('div', null, h('p', { className: 'mw-overline' }, 'Einträge · schreibgeschützt'), h('h2', { className: 'mw-title' }, 'Motivationswaage')),
+					h('button', { type: 'button', className: 'mw-btn mw-btn--text', onClick: () => setEntries(null) }, icon('back'), 'Zur Übersicht')
+				),
+				data.updatedAt &&
+					h('p', { className: 'mw-small mw-muted', style: { marginTop: '4px' } }, `Zuletzt bearbeitet am ${formatDate(data.updatedAt, locale, true)}`),
+				h(
+					'div',
+					{ className: 'mw-actions', style: { marginTop: '12px' } },
+					h(
+						'button',
+						{ type: 'button', className: 'mw-btn mw-btn--primary', onClick: exportPdf, disabled: busy !== null },
+						icon('download'),
+						busy === 'export' ? 'Export wird erstellt …' : 'Als PDF exportieren'
+					)
+				),
+				messageLine
+			),
+			h(ScaleCard, { args: balance.arguments, poles, readOnly: true }),
+			h(ConclusionCard, { value: balance.conclusion, isNew: isNewSince(balance.conclusionChangedAt, seenAt) }),
+			h(HalfSection, { half: 'change', args: balance.arguments, seenAt, readOnly: true, locale }),
+			h(HalfSection, { half: 'keep', args: balance.arguments, seenAt, readOnly: true, locale })
+		);
+	}
+
+	// ----- Tile (section 1.5.2)
+	const newCount = data.shared && data.balance ? countNew(data.balance, data.seenAt) : 0;
 	const [statusText, statusClass] = !data.released
 		? ['Nicht freigeschaltet', 'mw-status--off']
 		: data.shared
@@ -1122,8 +1260,6 @@ function CounsellorView({ api, locale, notify, informal, sessionId }) {
 		data.shared && data.updatedAt && `Zuletzt bearbeitet am ${formatDate(data.updatedAt, locale, true)}`
 	].filter(Boolean);
 
-	const poles = polesOf(data.poles);
-
 	return h(
 		'div',
 		{ className: 'mw-stack', ref: rootRef },
@@ -1134,7 +1270,12 @@ function CounsellorView({ api, locale, notify, informal, sessionId }) {
 				'div',
 				{ className: 'mw-head' },
 				h('div', null, h('p', { className: 'mw-overline' }, 'Digitales Tool'), h('h2', { className: 'mw-title' }, 'Motivationswaage')),
-				h('span', { className: cx('mw-status', statusClass) }, statusText)
+				h(
+					'div',
+					{ className: 'mw-badges' },
+					newCount > 0 && h('span', { className: 'mw-new' }, newCount === 1 ? '1 neuer Eintrag' : `${newCount} neue Einträge`),
+					h('span', { className: cx('mw-status', statusClass) }, statusText)
+				)
 			),
 			h('p', { className: 'mw-intro' }, COUNSELLOR_DESCRIPTION),
 			meta.length > 0 && h('p', { className: 'mw-small mw-muted', style: { marginTop: '8px' } }, meta.join(' · ')),
@@ -1151,16 +1292,11 @@ function CounsellorView({ api, locale, notify, informal, sessionId }) {
 				data.shared &&
 					h(
 						'button',
-						{ type: 'button', className: 'mw-btn mw-btn--primary', onClick: exportPdf, disabled: busy !== null },
-						icon('download'),
-						busy === 'export' ? 'Export wird erstellt …' : 'Als PDF exportieren'
+						{ type: 'button', className: 'mw-btn mw-btn--primary', onClick: openEntries, disabled: busy !== null },
+						icon('eye'),
+						busy === 'open' ? 'Wird geöffnet …' : 'Einträge ansehen'
 					),
-				h(
-					'button',
-					{ type: 'button', className: 'mw-btn mw-btn--outlined', onClick: () => setPreview(true) },
-					icon('eye'),
-					'User-Vorschau'
-				),
+				h('button', { type: 'button', className: 'mw-btn mw-btn--outlined', onClick: () => setPreview(true) }, 'User-Vorschau'),
 				data.released &&
 					!confirmRevoke &&
 					h(
@@ -1181,7 +1317,7 @@ function CounsellorView({ api, locale, notify, informal, sessionId }) {
 					h('button', { type: 'button', className: 'mw-btn mw-btn--danger', onClick: revoke }, 'Aufheben'),
 					h('button', { type: 'button', className: 'mw-btn mw-btn--text', onClick: () => setConfirmRevoke(false) }, 'Abbrechen')
 				),
-			message && h('p', { className: message.type === 'error' ? 'mw-error' : 'mw-muted', role: 'alert', style: { marginTop: '12px' } }, message.text)
+			messageLine
 		),
 		data.released &&
 			!data.shared &&
@@ -1193,17 +1329,10 @@ function CounsellorView({ api, locale, notify, informal, sessionId }) {
 					'p',
 					null,
 					data.started
-						? 'Die ratsuchende Person bearbeitet die Motivationswaage, hat die Einsicht aber nicht freigegeben. Inhalte sehen Sie erst, wenn sie sie mit Ihnen teilt.'
-						: 'Die ratsuchende Person hat noch keine Einträge vorgenommen. Sobald sie ihre Motivationswaage teilt, sehen Sie sie hier.'
+						? 'Die ratsuchende Person bearbeitet die Motivationswaage, hat die Einsicht aber nicht freigegeben. Die Einträge können Sie erst ansehen, wenn sie sie mit Ihnen teilt.'
+						: 'Die ratsuchende Person hat noch keine Einträge vorgenommen. Sobald sie ihre Motivationswaage teilt, können Sie die Einträge ansehen.'
 				)
-			),
-		data.shared &&
-			data.balance && [
-				h(ScaleCard, { key: 'scale', args: data.balance.arguments, poles, readOnly: true }),
-				h(ConclusionCard, { key: 'conclusion', value: data.balance.conclusion }),
-				h(HalfSection, { key: 'change', half: 'change', args: data.balance.arguments }),
-				h(HalfSection, { key: 'keep', half: 'keep', args: data.balance.arguments })
-			]
+			)
 	);
 }
 

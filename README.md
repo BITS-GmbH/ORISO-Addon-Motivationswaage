@@ -38,7 +38,7 @@ calculation, categories and example texts; the UI loads the same module.
   to the session (`askerId` claim).
 - API: `GET`/`PUT /api/balance` (client; whole state: arguments, conclusion, shared),
   `GET /api/balance/client`, `POST`/`DELETE /api/balance/client/release`, `POST /api/balance/client/export`
-  (counsellor).
+  (counsellor), `POST /api/balance/client/seen` (the counsellor opened the entries).
 - Release, insight and content are separate states: a counsellor can release the tool, but only
   sees content the client shared. The export checks again right before it answers.
 - Visibility: `visibility: "dynamic"`. Clients see the tool once released, with `badge: 1` until
@@ -54,6 +54,11 @@ calculation, categories and example texts; the UI loads the same module.
   - PDF export: audit `balance.exported`.
   - Before a new release the Träger's DPA gate (`/addons/host/gates`) is checked; 409 if it
     does not allow new counselling.
+- Counsellor view after section 1.5.2 of the description: a tile with status, "Freischalten" or
+  "Einträge ansehen", "User-Vorschau" and "Freischaltung aufheben"; the entries open read only as
+  cards with relevance and "Öffnen". Each argument and the conclusion carry `changedAt`; entries
+  changed after a counsellor's last visit (or all, before the first) are marked "Neu" (1.6.1).
+- Scale: PRO on the left, CONTRA on the right, as in the description's figure.
 - PDF export: the counsellor's browser prints a formatted page (tool, case, export date, date of
   the entries, scale with value and sums, conclusion, all arguments with ratings); "Als PDF
   speichern" in the print dialog gives the file.

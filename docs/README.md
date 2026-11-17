@@ -15,7 +15,8 @@ Ratsuchende wägen die Vor- und Nachteile einer Veränderung ihres Suchtverhalte
 **Für die Beratung**
 
 - Inhalte sieht die Beratung nur, wenn die ratsuchende Person sie teilt. Freischaltung und Einsicht sind getrennt, und das Teilen lässt sich jederzeit zurücknehmen.
-- Geteilte Inhalte erscheinen im Fall schreibgeschützt: Waage, Fazit und alle Argumente mit Bewertung. Sie lassen sich als PDF exportieren.
+- Im Fall zeigt eine Kachel den Status, „Freischalten“ bzw. „Einträge ansehen“, die „User-Vorschau“ und „Freischaltung aufheben“. Nach dem Aufheben verschwindet das Tool für die ratsuchende Person; ihre Einträge bleiben gespeichert.
+- „Einträge ansehen“ öffnet die geteilten Inhalte schreibgeschützt: Waage, Fazit und alle Argumente als Karten mit Bewertung. Was die Beratungskraft noch nicht gesehen hat, ist als „Neu“ markiert. Die Inhalte lassen sich als PDF exportieren.
 - Die Beratung wird benachrichtigt, wenn eine ratsuchende Person teilt oder Einträge ändert, höchstens einmal in 30 Minuten. Benachrichtigungen enthalten keine Inhalte.
 - In der „User-Vorschau“ probieren Beratende die Übung mit Testdaten aus, ohne dass etwas gespeichert wird.
 

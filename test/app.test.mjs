@@ -120,7 +120,7 @@ after(() => {
 
 const arg = (id, category, text, rating) => ({ id, category, text, rating });
 const askerToken = (sub) => token({ sub, roles: ['user'] });
-const counsellorFor = (askerId) => token({ sub: 'consultant-1', roles: ['consultant'], askerId, sessionId: 9 });
+const counsellorFor = (askerId, sub = 'consultant-1') => token({ sub, roles: ['consultant'], askerId, sessionId: 9 });
 
 describe('public files', () => {
 	it('serves manifest, settings schema and the UI modules', async () => {
@@ -302,6 +302,38 @@ describe('the balance', () => {
 		assert.deepEqual(back.body.arguments.map((a) => a.text), ['bleibt'], 'entries are back after a new release');
 		await call('/api/balance', { auth: asker, method: 'PUT', body: { arguments: back.body.arguments, shared: false } });
 		takeHostCalls();
+	});
+
+	it('marks entries as new for each counsellor until they open them', async () => {
+		const t0 = new Date(clock).toISOString();
+		await call('/api/balance', { auth: asker, method: 'PUT', body: { arguments: [arg('n1', 'A', 'alt', 2)], conclusion: 'Fazit', shared: true } });
+		takeHostCalls();
+		let state = (await call('/api/balance/client', { auth: counsellor })).body;
+		assert.equal(state.seenAt, null, 'never opened: everything is new');
+		assert.equal(state.balance.arguments[0].changedAt, t0);
+		assert.equal(state.balance.conclusionChangedAt, t0);
+
+		assert.equal((await call('/api/balance/client/seen', { auth: counsellor, method: 'POST' })).status, 200);
+		const seenAt = (await call('/api/balance/client', { auth: counsellor })).body.seenAt;
+		assert.equal(seenAt, t0);
+
+		clock += 60 * 1000;
+		await call('/api/balance', {
+			auth: asker,
+			method: 'PUT',
+			body: { arguments: [arg('n1', 'A', 'alt', 2), arg('n2', 'D', 'neu', 3)], conclusion: 'Fazit', shared: true }
+		});
+		takeHostCalls();
+		state = (await call('/api/balance/client', { auth: counsellor })).body;
+		const stamps = Object.fromEntries(state.balance.arguments.map((a) => [a.id, a.changedAt]));
+		assert.equal(stamps.n1, t0, 'unchanged entries keep their stamp');
+		assert.ok(stamps.n2 > seenAt, 'the new entry is newer than the last visit');
+		assert.equal(state.balance.conclusionChangedAt, t0);
+		assert.equal((await call('/api/balance/client', { auth: counsellorFor('asker-1', 'consultant-2') })).body.seenAt ?? null, null);
+
+		await call('/api/balance', { auth: asker, method: 'PUT', body: { arguments: state.balance.arguments, conclusion: 'Fazit', shared: false } });
+		takeHostCalls();
+		assert.equal((await call('/api/balance/client/seen', { auth: counsellor, method: 'POST' })).status, 403);
 	});
 
 	it('refuses a new release when the Träger has not confirmed the DPA', async () => {

@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { APP_ID, manifest, settingsSchema } from './manifest.mjs';
-import { calculate, cleanBalance, diffBalance } from './balance.mjs';
+import { calculate, cleanBalance, diffBalance, stampChanges } from './balance.mjs';
 import { hasRole } from './auth.mjs';
 import {
 	changedNotification,
@@ -61,6 +61,7 @@ const isAsker = (claims) => hasRole(claims, 'user') && !hasRole(claims, 'consult
 const view = (balance) => ({
 	arguments: balance?.arguments ?? [],
 	conclusion: balance?.conclusion ?? '',
+	conclusionChangedAt: balance?.conclusionChangedAt ?? null,
 	result: calculate(balance?.arguments ?? [])
 });
 
@@ -138,7 +139,8 @@ export const createApp = ({ store, verify, host = null, uiFiles = UI_FILES, now 
 			const settings = await loadSettings(claims);
 			const before = store.balanceOf(tenantId, askerId);
 			const shared = settings.allowSharing !== false && body.shared === true;
-			const saved = store.saveBalance(tenantId, askerId, clean, shared);
+			const stamped = stampChanges(before, clean, new Date(now()).toISOString());
+			const saved = store.saveBalance(tenantId, askerId, stamped, shared);
 			await reportSave(claims, tenantId, before, saved);
 			return json(res, 200, { ...view(saved), shared: saved.shared, updatedAt: saved.updatedAt });
 		}
@@ -158,6 +160,7 @@ export const createApp = ({ store, verify, host = null, uiFiles = UI_FILES, now 
 			updatedAt: balance?.updatedAt ?? null,
 			shared: readable,
 			balance: readable ? view(balance) : null,
+			seenAt: readable ? store.seenBy(tenantId, claims.askerId, claims.sub) : null,
 			poles: settings.poles
 		};
 	};
@@ -168,6 +171,15 @@ export const createApp = ({ store, verify, host = null, uiFiles = UI_FILES, now 
 		}
 		if (path === '/api/balance/client' && req.method === 'GET') {
 			return json(res, 200, await clientState(claims, tenantId));
+		}
+		if (path === '/api/balance/client/seen' && req.method === 'POST') {
+			const state = await clientState(claims, tenantId);
+			if (!state.shared) {
+				return json(res, 403, { error: 'not shared' });
+			}
+			const seenAt = new Date(now()).toISOString();
+			store.markSeen(tenantId, claims.askerId, claims.sub, seenAt);
+			return json(res, 200, { seenAt });
 		}
 		if (path === '/api/balance/client/export' && req.method === 'POST') {
 			// Checked again right before the export (tool description 1.7.4).

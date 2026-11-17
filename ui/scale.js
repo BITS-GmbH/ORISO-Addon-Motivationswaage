@@ -1,5 +1,6 @@
 // The scale: a beam that tips towards the heavier side and a dial whose needle shows the value
-// (−10 … +10). Left pan CONTRA, right pan PRO; inactive (level, no needle) without a value.
+// (−10 … +10). Left pan PRO, right pan CONTRA, as in the tool description's figure; inactive
+// (level, no needle) without a value.
 const { react: React } = globalThis.__ORISO_ADDON_SHARED__;
 const h = React.createElement;
 
@@ -60,7 +61,8 @@ export function Scale({ result, poles, title }) {
 	const id = React.useId().replace(/[^a-zA-Z0-9_-]/g, '');
 	const active = result.value !== null;
 	const value = active ? result.value : 0;
-	const tilt = (value / 10) * MAX_TILT;
+	// PRO is on the left: a positive value lowers the left pan and turns the needle left.
+	const tilt = -(value / 10) * MAX_TILT;
 	const radians = (tilt * Math.PI) / 180;
 	const dx = Math.cos(radians) * HALF_BEAM;
 	const dy = Math.sin(radians) * HALF_BEAM;
@@ -76,9 +78,9 @@ export function Scale({ result, poles, title }) {
 			h(
 				'linearGradient',
 				{ id: `${id}-dial`, x1: 0, x2: 1, y1: 0, y2: 0 },
-				h('stop', { offset: '0%', stopColor: 'var(--mw-contra)' }),
+				h('stop', { offset: '0%', stopColor: 'var(--mw-primary)' }),
 				h('stop', { offset: '50%', stopColor: 'var(--mw-surface-high)' }),
-				h('stop', { offset: '100%', stopColor: 'var(--mw-primary)' })
+				h('stop', { offset: '100%', stopColor: 'var(--mw-contra)' })
 			)
 		),
 		// stand
@@ -103,8 +105,8 @@ export function Scale({ result, poles, title }) {
 			})
 		),
 		h('circle', { cx: PIVOT.x, cy: PIVOT.y, r: 10, fill: 'var(--mw-surface)', stroke: 'var(--mw-text)', strokeWidth: 4 }),
-		pan('contra', PIVOT.x - dx, PIVOT.y - dy, { side: 'contra', points: result.contra, label: poles.contra, active }),
-		pan('pro', PIVOT.x + dx, PIVOT.y + dy, { side: 'pro', points: result.pro, label: poles.pro, active }),
+		pan('pro', PIVOT.x - dx, PIVOT.y - dy, { side: 'pro', points: result.pro, label: poles.pro, active }),
+		pan('contra', PIVOT.x + dx, PIVOT.y + dy, { side: 'contra', points: result.contra, label: poles.contra, active }),
 		// dial
 		h('path', {
 			d: `M${DIAL.x - DIAL.r} ${DIAL.y} A${DIAL.r} ${DIAL.r} 0 0 1 ${DIAL.x + DIAL.r} ${DIAL.y} Z`,
@@ -119,6 +121,8 @@ export function Scale({ result, poles, title }) {
 			strokeWidth: 7,
 			strokeLinecap: 'round'
 		}),
+		h('text', { x: DIAL.x - DIAL.r - 8, y: DIAL.y - 4, textAnchor: 'end', fontSize: 13, fontWeight: 700, fill: 'var(--mw-primary)' }, 'PRO'),
+		h('text', { x: DIAL.x + DIAL.r + 8, y: DIAL.y - 4, textAnchor: 'start', fontSize: 13, fontWeight: 700, fill: 'var(--mw-contra)' }, 'CONTRA'),
 		...[-10, -5, 0, 5, 10].map((v) =>
 			h('line', { key: v, ...tick(v, v === 0 ? 14 : 9), stroke: 'var(--mw-text)', strokeWidth: 2, strokeLinecap: 'round' })
 		),
@@ -127,7 +131,7 @@ export function Scale({ result, poles, title }) {
 				'g',
 				{
 					className: 'mw-needle',
-					style: { transform: `rotate(${(value / 10) * 90}deg)`, transformOrigin: `${DIAL.x}px ${DIAL.y}px` }
+					style: { transform: `rotate(${-(value / 10) * 90}deg)`, transformOrigin: `${DIAL.x}px ${DIAL.y}px` }
 				},
 				h('path', {
 					d: `M${DIAL.x - 3.5} ${DIAL.y} L${DIAL.x} ${DIAL.y - DIAL.r + 12} L${DIAL.x + 3.5} ${DIAL.y} Z`,

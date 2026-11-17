@@ -8,6 +8,13 @@ export const openStore = (file) => {
 	}
 	const db = new DatabaseSync(file);
 	db.exec(`
+		CREATE TABLE IF NOT EXISTS views (
+			tenant_id INTEGER NOT NULL,
+			asker_id TEXT NOT NULL,
+			counsellor_id TEXT NOT NULL,
+			seen_at TEXT NOT NULL,
+			PRIMARY KEY (tenant_id, asker_id, counsellor_id)
+		);
 		CREATE TABLE IF NOT EXISTS releases (
 			tenant_id INTEGER NOT NULL,
 			asker_id TEXT NOT NULL,
@@ -42,6 +49,12 @@ export const openStore = (file) => {
 		ON CONFLICT (tenant_id, asker_id) DO UPDATE SET data = excluded.data, shared = excluded.shared, updated_at = excluded.updated_at
 	`);
 	const setNotified = db.prepare('UPDATE balances SET notified_at = ? WHERE tenant_id = ? AND asker_id = ?');
+	const findSeen = db.prepare('SELECT seen_at AS seenAt FROM views WHERE tenant_id = ? AND asker_id = ? AND counsellor_id = ?');
+	const upsertSeen = db.prepare(
+		'INSERT INTO views (tenant_id, asker_id, counsellor_id, seen_at) VALUES (?, ?, ?, ?) ON CONFLICT (tenant_id, asker_id, counsellor_id) DO UPDATE SET seen_at = excluded.seen_at'
+	);
+	const deleteViewsOfAsker = db.prepare('DELETE FROM views WHERE asker_id = ?');
+	const deleteViewsOfCounsellor = db.prepare('DELETE FROM views WHERE counsellor_id = ?');
 	const deleteRelease = db.prepare('DELETE FROM releases WHERE tenant_id = ? AND asker_id = ?');
 	const deleteReleasesOf = db.prepare('DELETE FROM releases WHERE asker_id = ?');
 	const deleteBalancesOf = db.prepare('DELETE FROM balances WHERE asker_id = ?');
@@ -77,11 +90,18 @@ export const openStore = (file) => {
 		},
 		balanceOf,
 		/** Stores arguments and conclusion with the sharing choice; returns the stored state. */
-		saveBalance(tenantId, askerId, { arguments: args, conclusion }, shared) {
+		/** When this counsellor last opened the client's entries; null if never. */
+		seenBy(tenantId, askerId, counsellorId) {
+			return findSeen.get(tenantId, askerId, counsellorId)?.seenAt ?? null;
+		},
+		markSeen(tenantId, askerId, counsellorId, at) {
+			upsertSeen.run(tenantId, askerId, counsellorId, at);
+		},
+		saveBalance(tenantId, askerId, { arguments: args, conclusion, conclusionChangedAt = null }, shared) {
 			upsertBalance.run(
 				tenantId,
 				askerId,
-				JSON.stringify({ arguments: args, conclusion }),
+				JSON.stringify({ arguments: args, conclusion, conclusionChangedAt }),
 				shared ? 1 : 0,
 				new Date().toISOString()
 			);
@@ -92,10 +112,12 @@ export const openStore = (file) => {
 		},
 		/** Removes everything stored about a client; unknown ids are fine. Returns the rows removed. */
 		deleteAsker(askerId) {
+			deleteViewsOfAsker.run(askerId);
 			return Number(deleteReleasesOf.run(askerId).changes) + Number(deleteBalancesOf.run(askerId).changes);
 		},
 		/** A deleted counsellor stays in no release; the release itself belongs to the client. */
 		forgetCounsellor(counsellorId) {
+			deleteViewsOfCounsellor.run(counsellorId);
 			return Number(forgetReleaser.run(counsellorId).changes);
 		},
 		statistics(tenantId) {

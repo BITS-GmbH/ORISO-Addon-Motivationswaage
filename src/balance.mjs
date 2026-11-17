@@ -189,3 +189,26 @@ export const tendency = (value) => {
 	}
 	return size >= 3 ? `${side}-Tendenz` : `Leichte ${side}-Tendenz`;
 };
+
+/**
+ * Stamps when each argument (and the conclusion) last changed, so counsellors can see what is new
+ * to them (tool description 1.6.1). Unchanged entries keep their stamp.
+ */
+export const stampChanges = (before, clean, at) => {
+	const old = new Map((before?.arguments ?? []).map((arg) => [arg.id, arg]));
+	const args = clean.arguments.map((arg) => {
+		const previous = old.get(arg.id);
+		const same =
+			previous && previous.text === arg.text && previous.rating === arg.rating && previous.category === arg.category;
+		return { ...arg, changedAt: same ? (previous.changedAt ?? at) : at };
+	});
+	const sameConclusion = (before?.conclusion ?? '') === clean.conclusion;
+	return {
+		arguments: args,
+		conclusion: clean.conclusion,
+		conclusionChangedAt: clean.conclusion ? (sameConclusion ? (before?.conclusionChangedAt ?? at) : at) : null
+	};
+};
+
+/** Entries changed after `seenAt` (all of them when the counsellor never looked). */
+export const isNewSince = (changedAt, seenAt) => Boolean(changedAt) && (!seenAt || changedAt > seenAt);

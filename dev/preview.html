@@ -42,14 +42,14 @@
 	import * as React from 'react';
 	import * as reactDomClient from 'react-dom/client';
 	globalThis.__ORISO_ADDON_SHARED__ = { contract: 'oriso-addon/v1', react: React, reactDomClient };
-	const { calculate } = await import('/ui/balance.mjs');
+	const { calculate, cleanBalance, stampChanges } = await import('/ui/balance.mjs');
 	const addon = await import('/ui/entry.js');
 
-	const fresh = () => ({ released: false, releasedAt: null, arguments: [], conclusion: '', shared: false, updatedAt: null, started: false });
+	const fresh = () => ({ released: false, releasedAt: null, arguments: [], conclusion: '', conclusionChangedAt: null, shared: false, updatedAt: null, started: false, seenAt: null });
 	let state = JSON.parse(sessionStorage.getItem('mw-preview') ?? 'null') ?? fresh();
 	const persist = () => sessionStorage.setItem('mw-preview', JSON.stringify(state));
 	const settings = { intro: '', poles: 'CONTRA Veränderung / PRO Veränderung', allowSharing: true };
-	const view = () => ({ arguments: state.arguments, conclusion: state.conclusion, result: calculate(state.arguments) });
+	const view = () => ({ arguments: state.arguments, conclusion: state.conclusion, conclusionChangedAt: state.conclusionChangedAt, result: calculate(state.arguments) });
 	const ok = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
 	const api = async (path, init = {}) => {
@@ -61,14 +61,15 @@
 		if (path === '/balance' && method === 'PUT') {
 			if (!state.released) return new Response('{}', { status: 403 });
 			const body = JSON.parse(init.body);
-			Object.assign(state, { arguments: body.arguments, conclusion: body.conclusion ?? '', shared: body.shared, updatedAt: new Date().toISOString(), started: true });
+			const stamped = stampChanges(state, cleanBalance(body, () => Math.random().toString(36).slice(2, 10)), new Date().toISOString());
+			Object.assign(state, stamped, { shared: body.shared, updatedAt: new Date().toISOString(), started: true });
 			persist();
 			setTimeout(renderCounsellor, 0);
 			return ok({ ...view(), shared: state.shared, updatedAt: state.updatedAt });
 		}
 		const client = () => ({
 			released: state.released, releasedAt: state.releasedAt, started: state.started, updatedAt: state.updatedAt,
-			shared: state.released && state.shared, balance: state.released && state.shared ? view() : null, poles: settings.poles
+			shared: state.released && state.shared, balance: state.released && state.shared ? view() : null, seenAt: state.seenAt, poles: settings.poles
 		});
 		if (path === '/balance/client') return ok(client());
 		if (path === '/balance/client/release' && method === 'DELETE') {
@@ -81,6 +82,7 @@
 			setTimeout(renderAsker, 0);
 			return ok({ released: true, releasedAt: state.releasedAt });
 		}
+		if (path === '/balance/client/seen') { state.seenAt = new Date().toISOString(); persist(); return ok({ seenAt: state.seenAt }); }
 		if (path === '/balance/client/export') return ok({ ...client(), exportedAt: new Date().toISOString() });
 		return new Response('{}', { status: 404 });
 	};
@@ -111,7 +113,7 @@
 	document.getElementById('informal').onchange = () => { renderAsker(); renderCounsellor(); };
 	document.getElementById('reset').onclick = () => { state = fresh(); persist(); renderAsker(); renderCounsellor(); };
 	document.getElementById('sample').onclick = () => {
-		const a = (id, category, text, rating) => ({ id, category, text, rating });
+		const a = (id, category, text, rating) => ({ id, category, text, rating, changedAt: new Date().toISOString() });
 		state = { ...fresh(), released: true, releasedAt: new Date().toISOString(), started: true, shared: true, updatedAt: new Date().toISOString(),
 			conclusion: 'Die Vorteile überwiegen deutlich. Ich möchte es mit Unterstützung versuchen, habe aber Respekt vor den ersten Wochen.',
 			arguments: [
